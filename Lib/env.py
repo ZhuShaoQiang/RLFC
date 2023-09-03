@@ -53,7 +53,7 @@ class CliffWalking(BaseGrid):
     ^: goal
     """
     def __init__(self, step_reward: float=-0.1, dead_reward: float=-10, goal_reward: float=10,
-                 total_col: int=12, total_row: int=4) -> None:
+                 total_col: int=12, total_row: int=4, one_hot: bool=True) -> None:
         super().__init__(step_reward, dead_reward, goal_reward,
                          total_col=total_col, total_row=total_row)
         self.move = np.array([
@@ -69,20 +69,33 @@ class CliffWalking(BaseGrid):
         2 左：1, 2
         3 右: 1, 4
         得证：move是正确的，但是需要在step中编写防止超界得代码
+
+        one_hot: step和reset返回的坐标是否是one_hot向量（但仍然会保留非one_hot的坐标）
         """
-
+        self.total_step = 0  # 设置最大步数上限
+        self.max_step = 1000  # 最大1K步
         self.win_pos = np.array([self.total_row-1, self.total_col-1], dtype=np.int8)
-        self.die_pos = np.array([], dtype=np.int8)
+        self.die_pos = np.array([self.total_row-1, 1], dtype=np.int8)
         for c in range(2, self.total_col-1):
-            np.vstack((self.die_pos, [self.total_row-1, c]), dtype=np.int8)
+            self.die_pos = np.vstack((self.die_pos, [self.total_row-1, c]), dtype=np.int8)
+        # print("win:", self.win_pos)
+        # print("die:", self.die_pos)
 
+        self.one_hot = one_hot
+        if one_hot:
+            self._one_hots = np.eye(self.total_col*self.total_row)  # 这是一个48*48的对角阵
+            self.obs_space = self.total_col*self.total_row
+        else:
+            self.obs_space = 2
 
     def reset(self) -> Tuple[np.ndarray, dict]:
         """
         初始化agent的位置，初始位置必在左下角的起点
         """
+        self.total_step = 0
         self.pos = np.array([self.total_row-1, 0], dtype=np.int8)  # 位置不可能为负
-        return self.pos, {"pos": self.pos}
+        res_pos = self.__one_hot_pos() if self.one_hot else self.pos
+        return res_pos, {"pos": self.pos}
 
     def step(self, action) -> Tuple[np.ndarray, float, bool, bool, dict]:
         """
@@ -91,17 +104,37 @@ class CliffWalking(BaseGrid):
         如果在边界处执行位置到达了边界之外（不是掉下悬崖），那么位置不变
         返回值： 新位置，奖励，通关(成功为True), 死亡(死亡为True)，info信息
         """
+        self.total_step += 1
         if action < 0 or action >= len(self.move):
             # 如果动作<0或者>=4，都是超界了
             raise f"[-] 期望动作范围是[0, 3], 分别代表 上 下 左 右，得到了动作: {action}"
+        reward = self.step_reward
         self.pos = self.pos + self.move[action]  # 执行动作
         self.__process_exceedings()  # 处理超界坐标
 
         win = self.__is_win()
         die = self.__is_die()
         assert not (win and die), f"pos有问题，die和win同时发生了"  # 这个地方不能同时为True
+        if win:
+            reward = self.goal_reward
+        else:
+            if self.total_step >= self.max_step:
+                # 一定步数走不完直接死
+                die = True
+        if die:
+            reward = self.dead_reward
 
-        return self.pos, self.step_reward, win, die, {"win": win, "die": die, "pos": self.pos, "reward": self.step_reward}
+        res_pos = self.__one_hot_pos() if self.one_hot else self.pos
+        return res_pos, reward, win, die, {"win": win, "die": die, "pos": self.pos, "reward": reward}
+    
+    def __one_hot_pos(self):
+        """
+        返回one_hot的坐标
+        """
+        n = int(
+            (self.pos[0]*self.total_col + self.pos[1]).item()
+        )
+        return self._one_hots[n]
 
     def __process_exceedings(self):
         """
@@ -115,7 +148,9 @@ class CliffWalking(BaseGrid):
         """
         判断此处是不是死了，死了为True
         """
-        return self.pos in self.die_pos
+        # return self.pos in self.die_pos
+        # FIXME: ndarray不能直接in，应该用下面的方法
+        return np.any(np.all(self.pos == self.die_pos, axis=1))
 
     def __is_win(self):
         """

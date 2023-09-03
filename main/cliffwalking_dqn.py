@@ -10,8 +10,8 @@ import os
 sys.path.append(os.getcwd())
 import torch
 
-from Lib.algorithms import VanillaPPO
-from Lib.network import MlpPolicy
+from Lib.algorithms import VanillaPPO_dqn
+from Lib.network import DqnPolicy
 from Lib.envwrappers import ToTensorWrapper
 from Lib.utils import set_seed
 
@@ -29,12 +29,12 @@ def main():
     
     env = ToTensorWrapper(env=env)
     # env.reset(seed=params["seed"])  # 如果使用gym的环境，这句话可以设定随机种子，但是我们这个环境不涉及随机，不需要设置
-    policy = MlpPolicy(
+    policy = DqnPolicy(
         input_dim=env.obs_space, output_dim=4, activation=params["activation"],
-        hidden=[32, 16, 8], last_activation=torch.nn.Softmax(dim=1)
+        hidden=[], last_activation=None
     )
     
-    model = VanillaPPO(env=env, policy=policy, params=params)
+    model = VanillaPPO_dqn(env=env, policy=policy, params=params)
     model.learn()
 
 
