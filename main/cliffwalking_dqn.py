@@ -31,7 +31,7 @@ def main():
     # env.reset(seed=params["seed"])  # 如果使用gym的环境，这句话可以设定随机种子，但是我们这个环境不涉及随机，不需要设置
     policy = DqnPolicy(
         input_dim=env.obs_space, output_dim=4, activation=params["activation"],
-        hidden=[], last_activation=None
+        hidden=[32, 16], last_activation=None
     )
     
     model = VanillaPPO_dqn(env=env, policy=policy, params=params)

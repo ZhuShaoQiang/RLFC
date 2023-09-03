@@ -6,12 +6,12 @@ import torch
 from Lib.env import CliffWalking
 
 params = {
-    "train_total_episodes": 5000,  # 总共训练的episode总数
+    "train_total_episodes": 2000,  # 总共训练的episode总数
     "train_num_epoch": 10,  # 每个episode之后重复训练多少次
-    "batch_size": 4,
+    "batch_size": 64,
     "buffer_size": 1001,  # 这个是最大值
     "epsilon": 0.05,  # 贪心算法的探索率
-    "lr": 0.01,
+    "lr": 0.001,
     "last_n_avg_rewards": 50,
     "seed": 42,
 
@@ -31,6 +31,6 @@ params = {
     "total_col": 12,
     "total_row": 4,
 
-    "LOGS_PATH": "./ckp/LOGS/cliffwalking_DQN/",
-    "SAVE_PATH": "./ckp/OUT/cliffwalking_DQN/",
+    "LOGS_PATH": "./ckp/LOGS/cliffwalking_DQN005/",
+    "SAVE_PATH": "./ckp/OUT/cliffwalking_DQN005/",
 }

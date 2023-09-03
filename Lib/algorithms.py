@@ -11,6 +11,7 @@ from gym import Env
 from . import models
 from .network import BaseNetwork
 from .replaybuffer import ReplayBuffer
+from .logger import Logger
 
 from abc import ABC, abstractmethod
 
@@ -27,6 +28,11 @@ class BaseAlgorithm(ABC):
         self.env = env
         self.params = params
         self.rb = ReplayBuffer(params["buffer_size"])
+
+        if "LOGS_PATH" in self.params and self.params["LOGS_PATH"] != "":
+            self.logger = Logger(params["LOGS_PATH"])
+        else:
+            self.logger = None
 
         self.episode_reward = 0
         self.episodes_reward = []
@@ -100,9 +106,10 @@ class VanillaPPO_dqn(BaseAlgorithm):
         self.last_n_win = []  # 记录最近10场胜利情况，胜利为1，失败为0
     
     @torch.no_grad()
-    def collect_rollouts(self):
+    def collect_rollouts(self, episode_num):
         """
         收集一轮经验
+        episode_num：第几次收集经验
         """
         self.policy.eval()
         self.episode_reward = 0
@@ -133,7 +140,15 @@ class VanillaPPO_dqn(BaseAlgorithm):
                     self.win_tims += 1
                 else:
                     self.last_n_win.append(0)
+                
+                ### 每回合记录日志
+                self.last_n_win = self.last_n_win[-self.params["last_n_avg_rewards"]:]
+                self.logger.record_num("episode reward", self.episode_reward, episode_num)
+                self.logger.record_num("last n avg reward", self.last_n_avg_reward, episode_num)
+                self.logger.record_num("last n win ratio", np.mean(self.last_n_win), episode_num)
+
                 return
+            # fi done
 
             state = state_next.to(self.params["device"])
 
@@ -189,13 +204,12 @@ class VanillaPPO_dqn(BaseAlgorithm):
             # 0. 清空经验
             self.reset_rb()
             # 1. 收集经验
-            self.collect_rollouts()
+            self.collect_rollouts(i)
             # 2. 计算优势和回报
             self.compute_advantage_and_return()
             # 3. 训练
             self.train()
-            print(f"当前总胜率:{self.win_tims/(i+1)}, 最近n场胜率：{np.mean(self.last_n_win[-self.params['last_n_avg_rewards']:])}")
-            self.last_n_win = self.last_n_win[-self.params["last_n_avg_rewards"]:]
+            print(f"当前总胜率:{self.win_tims/(i+1)}, 最近n场胜率：{np.mean(self.last_n_win)}")
         print(f"总胜率:{self.win_tims/self.params['train_total_episodes']}")
 
 class FVRL_GRID(BaseAlgorithm):
