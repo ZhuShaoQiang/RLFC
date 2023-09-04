@@ -12,7 +12,7 @@ import os
 sys.path.append(os.getcwd())
 
 # 导入参数
-from config.fvrl_grid_ppo import params
+from config.grid_cliffwalking_dqn_ppo import params
 
 def main():
     # 创建日志和保存的文件夹
