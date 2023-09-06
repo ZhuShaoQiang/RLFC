@@ -16,7 +16,7 @@ from Lib.envwrappers import ToTensorWrapper
 from Lib.utils import set_seed
 
 # 导入参数
-from config.fgrid_cliffwalking_dqn_ppo import params
+from config.grid_cliffwalking_dqn_ppo import params
 
 def main():
     # 创建日志和保存的文件夹

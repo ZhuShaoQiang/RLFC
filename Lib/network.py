@@ -24,13 +24,6 @@ class BaseNetwork(nn.Module, ABC):
         self.activation = activation
 
     @abstractmethod
-    def _build_NN(self):
-        """
-        对网络中的参数正交初始化
-        """
-        raise f"在 Base Model 中未实现这个方法 _build_NN，请在继承类中重写这个方法"
-
-    @abstractmethod
     def forward(self, x):
         """
         x: 输入的状态
@@ -219,4 +212,51 @@ class MlpPolicy(BaseNetwork):
             entropy = _entropy.mean()
 
         return value, action_log_prob, entropy
+    
+
+class FeedForward(BaseNetwork):
+    """
+    前馈神经网络，是密集网络
+    """
+    def __init__(self, input_dim, output_dim, activation: nn.Module=nn.LeakyReLU(),
+                 hidden: list=[64, 64], last_activation: nn.Module=None) -> None:
+        """
+        input_dim: FF网络的输入维度
+        output_dim: FF网络的输出维度
+        
+        hidden: 有多少隐藏层，每个隐藏层多少个神经元
+        input -> hidden[0] -> hidden[...] -> output
+
+        last_activation: 输出层之后的激活函数，为None则为不要
+        """
+        super().__init__(input_dim=input_dim, output_dim=output_dim, activation=activation)
+
+        ### 构建网络
+        self.network = nn.Sequential()
+
+        # 从输入层到除了输出层之外的网络构造
+        last_dim = self.input_dim
+        for idx, h in enumerate(hidden):
+            self.network.add_module(
+                f"input_ff_{idx}", nn.Linear(last_dim, h)
+            )
+            self.network.add_module(
+                f"activation_{idx}", activation
+            )
+            last_dim = h
+
+        # 添加输出层
+        self.network.add_module(
+            "output", nn.Linear(last_dim, self.output_dim)
+        )
+        if not last_activation is None:
+            self.network.add_module(
+                "activation_last", last_activation,
+            )
+    
+    def forward(self, x):
+        """
+        deterministic: 是否确定性产生动作，False是有随机
+        """
+        return self.network(x)
     

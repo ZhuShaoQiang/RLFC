@@ -5,20 +5,25 @@
 如DQN网络
 """
 from torch import nn
+from torch.distributions import Categorical
+
 from abc import ABC, abstractmethod
+
+from .network import FeedForward
+from .utils import initialize
 
 class BaseModel(nn.Module, ABC):
     """
     这个库内的模型的基本模型结构在这里体现
     """
-    def __init__(self, state_dim, action_dim) -> None:
+    def __init__(self, input_dim, output_dim) -> None:
         """
         state_dim: 状态的形状
         action_dim: 动作的形状
         """
         super(BaseModel, self).__init__()
-        self.state_dim = state_dim
-        self.action_dim = action_dim
+        self.input_dim = input_dim
+        self.output_dim = output_dim
     
     @abstractmethod
     def forward(self, x, deterministic:bool = False):
@@ -30,21 +35,35 @@ class BaseModel(nn.Module, ABC):
         """
         raise f"在 Base Model 中未实现这个方法 forward，请在继承类中重写这个方法"
 
-    @abstractmethod
-    def evaluate_actions(self, x, action):
-        """
-        x: 输入的状态
-        action: 旧的动作，这个函数计算之前的动作在当前的模型中，当前的观察下，的动作log_prob值，和当前的分布的entropy
+class RLFCScorer(BaseModel):
+    """
+    训练打分器的模型
+    输入时两个状态，输出是一个分数，代表这个和专家模型的相符程度
+    训练的时候，目前确定的方案是：
+    假设专家的经验是s1 s2 s3
+    那么我们可以认为，非专家的经验是：s3 s2 s1
+    """
+    def __init__(self, input_dim, output_dim, activation: nn.Module=nn.LeakyReLU(),
+                hidden: list=[64, 64], last_activation: nn.Module=None) -> None:
+        super().__init__(input_dim, output_dim)
 
-        输出： value, action_log_prob, entropy
-        """
-        raise f"在 Base Model 中未实现这个方法 evaluate_actions，请在继承类中重写这个方法"
+        self.nn = FeedForward(
+            input_dim=input_dim, output_dim=output_dim, activation=activation,
+            hidden=hidden, last_activation=last_activation
+        )
     
-    @abstractmethod
-    def get_state_value_only(self, x):
+        self._build_NN()
+    
+    def _build_NN(self):
         """
-        只得到评论家的价值
-
-        输出：value
+        对所有的网络正交初始化
         """
-        raise f"在 Base Model 中未实现这个方法 get_state_value_only，请在继承类中重写这个方法"
+        initialize(self.nn)
+    
+    def forward(self, x):
+        """
+        这个只是个打分器，可以看做是一个回归模型
+        """
+        score = self.nn.forward(x)
+        return score
+            

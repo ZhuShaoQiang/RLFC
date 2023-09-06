@@ -95,7 +95,7 @@ class VanillaPPO_dqn(BaseAlgorithm):
     """
     DQN的PPO的算法
     """
-    def __init__(self, env: Env, policy: BaseNetwork, params: dict) -> None:
+    def __init__(self, env: Env, params: dict, policy: BaseNetwork) -> None:
         super().__init__(env, params)
         self.policy = policy.to(self.params["device"])
         self.optimizer = self.params["optimizer"](
@@ -216,14 +216,14 @@ class FVRL_GRID(BaseAlgorithm):
     """
     自己的算法，但是是网格世界版本
     """
-    def __init__(self, env: Env, params: dict) -> None:
+    def __init__(self, env: Env, params: dict, policy: BaseNetwork) -> None:
         super().__init__(env, params)
 
 class VanillaPPO(BaseAlgorithm):
     """
     普通的PPO的算法
     """
-    def __init__(self, env: Env, policy: BaseNetwork, params: dict) -> None:
+    def __init__(self, env: Env, params: dict, policy: BaseNetwork) -> None:
         super().__init__(env, params)
         self.policy = policy.to(self.params["device"])
         self.optimizer = self.params["optimizer"](

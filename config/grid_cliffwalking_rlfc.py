@@ -1,4 +1,4 @@
-# dqn的配置
+# 自己算法（fvrl）的配置
 import sys
 import os
 sys.path.append(os.getcwd())
@@ -6,6 +6,12 @@ import torch
 from Lib.env import CliffWalking
 
 params = {
+    # 下面是训练经验打分器的部分
+    "onehot": True,
+    "train_scorer_epoch": 40,  # 打分器训练多少epoch
+    "scorer_activation": torch.nn.LeakyReLU(),
+
+    # 下面是训练RL算法的设置
     "train_total_episodes": 2000,  # 总共训练的episode总数
     "train_num_epoch": 10,  # 每个episode之后重复训练多少次
     "batch_size": 64,
@@ -33,4 +39,5 @@ params = {
 
     "LOGS_PATH": "./ckp/LOGS/cliffwalking_DQN005/",
     "SAVE_PATH": "./ckp/OUT/cliffwalking_DQN005/",
+    "SCORER_PATH": "./ckp/OUT/cliffwalking_DQN005/scorer.pth",
 }
