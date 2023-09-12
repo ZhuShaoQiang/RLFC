@@ -8,7 +8,7 @@ from Lib.env import CliffWalking
 params = {
     # 下面是训练经验打分器的部分
     "onehot": True,
-    "train_scorer_epoch": 40,  # 打分器训练多少epoch
+    "train_scorer_epoch": 200,  # 打分器训练多少epoch
     "scorer_activation": torch.nn.LeakyReLU(),
 
     # 下面是训练RL算法的设置
@@ -28,6 +28,7 @@ params = {
     "entropy_coef": 0.0,
     "value_loss_coef": 0.5,
     "max_grad_norm": 0.5,
+    "scorer_eps": 0.1,  # 用于乘给打分器作为一个系数
 
     "env": CliffWalking,
     "gamma": 0.99,
@@ -37,7 +38,7 @@ params = {
     "total_col": 12,
     "total_row": 4,
 
-    "LOGS_PATH": "./ckp/LOGS/cliffwalking_DQN005/",
-    "SAVE_PATH": "./ckp/OUT/cliffwalking_DQN005/",
-    "SCORER_PATH": "./ckp/OUT/cliffwalking_DQN005/scorer.pth",
+    "LOGS_PATH": "./ckp/LOGS/cliffwalking_DQN_rlfc/",
+    "SAVE_PATH": "./ckp/OUT/cliffwalking_DQN_rlfc/",
+    "SCORER_PATH": "./ckp/OUT/cliffwalking_DQN_rlfc/scorer.pth",
 }

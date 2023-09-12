@@ -10,6 +10,7 @@ from gym import Env
 
 from . import models
 from .network import BaseNetwork
+from .models import BaseModel
 from .replaybuffer import ReplayBuffer
 from .logger import Logger
 
@@ -349,4 +350,147 @@ class VanillaPPO(BaseAlgorithm):
             # 3. 训练
             self.train()
             print(f"当前总胜率:{self.win_tims/(i+1)}")
+        print(f"总胜率:{self.win_tims/self.params['train_total_episodes']}")
+
+class PPO_RLFC(BaseAlgorithm):
+    """
+    DQN的PPO的算法
+    这个是我们的IDEA，从经验中学习
+    """
+    def __init__(self, env: Env, params: dict, policy: BaseModel, scorer: BaseModel) -> None:
+        """
+        env: 强化学习的环境
+        params: 参数
+        policy: 策略网络
+        scorer: 打分器
+        """
+        super().__init__(env, params)
+        self.policy = policy.to(self.params["device"])
+        self.scorer = scorer.to(self.params["device"]).requires_grad_(False)
+        self.optimizer = self.params["optimizer"](
+            self.policy.parameters(), lr=self.params["lr"]
+        )
+        self.loss_fn = torch.nn.MSELoss()
+        self.win_tims = 0
+        self.last_n_win = []  # 记录最近10场胜利情况，胜利为1，失败为0
+    
+    @torch.no_grad()
+    def collect_rollouts(self, episode_num):
+        """
+        收集一轮经验
+        episode_num：第几次收集经验
+        """
+        self.policy.eval()
+        self.episode_reward = 0
+
+        state, info = self.env.reset()  # [1, state_dim]
+        s0 = state.to(self.params["device"])  # 记录上一个状态
+        s1 = s0  # 记录当前状态
+        while True:
+            state = state.to(self.params["device"])
+
+            # 通过网络，得到当前状态的各个动作的价值
+            action_values = self.policy.forward(x=state).squeeze()
+            # 采样动作
+            action_to_take = self.policy.sample_action(action_values, self.params["epsilon"])
+            # 得到当前动作的预估价值
+            action_to_take_value = action_values[action_to_take]
+
+            state_next, reward, win, die, _ = self.env.step(action=action_to_take)
+            state_next = state_next.to(self.params["device"])
+            s2 = state_next
+            # state_next就是s2
+
+            # 根据现在的状态，下一个状态，得到与专家经验相符的分数
+            tmp = torch.cat([s0, s1, s2], dim=1)
+            score = self.scorer.forward(tmp).item()*self.params["scorer_eps"]
+            
+            done = win or die
+
+            ### 记录内容
+            # 保存的分数应该多一个score，作为他的额外奖励
+            self.cache(state, action_to_take, reward+score, state_next)
+            self.episode_reward += reward  # 但是画图用的折线应该用原奖励
+            
+            if done:
+                self.episodes_reward.append(self.episode_reward)
+                print(f"近n轮平均回报:{self.last_n_avg_reward}, 本轮回报：{self.episode_reward}; ", end="")
+                if win:
+                    self.last_n_win.append(1)
+                    self.win_tims += 1
+                else:
+                    self.last_n_win.append(0)
+                
+                ### 每回合记录日志
+                self.last_n_win = self.last_n_win[-self.params["last_n_avg_rewards"]:]
+                self.logger.record_num("episode reward", self.episode_reward, episode_num)
+                self.logger.record_num("last n avg reward", self.last_n_avg_reward, episode_num)
+                self.logger.record_num("last n win ratio", np.mean(self.last_n_win), episode_num)
+
+                return
+            # fi done
+
+            # 向后推进一个时间步
+            s0 = s1
+            s1 = state_next
+            state = state_next.to(self.params["device"])
+
+    def compute_advantage_and_return(self):
+        """
+        根据收集到的经验，计算回报
+        0        1              2       3
+        state action_to_take reward, state_next)
+        状态    动作          环境奖励   下一个状态
+        现在这个算法是收集一整轮然后计算，所以可以直接倒着计算环境奖励的累计
+        """
+        for idx in reversed(range(1, self.rb.size)):
+            # 下面这个步骤计算完之后，reward就变成return了
+            self.rb.buffer[idx-1][2] = self.rb.buffer[idx-1][2] + self.params["gamma"] * self.rb.buffer[idx][2]
+    
+    def train(self):
+        """
+        根据收集到的经验，训练
+        0        1              2       3
+        state action_to_take reward, state_next)
+        状态    动作          环境奖励   下一个状态
+        """
+        self.policy.train()
+        for _ in range(self.params["train_num_epoch"]):
+            experiences = self.rb.get(self.params["batch_size"])
+
+            states = torch.stack([e[0] for e in experiences]).squeeze(1)
+            old_actions = torch.tensor([e[1] for e in experiences], device=self.params["device"]).squeeze()
+            returns = torch.tensor([e[2] for e in experiences], device=self.params["device"], dtype=torch.float)
+            # next_states = torch.stack([e[3] for e in experiences]).squeeze(1)
+
+            # 拿到当前网络下，这些状态会执行什么动作
+            action_values = self.policy.forward(states)
+            # 拿到之前执行的动作的当前的value
+            pred_values = action_values[range(len(experiences)), old_actions]
+
+            ### 计算损失
+            loss = self.loss_fn(returns, pred_values)
+
+            self.optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                self.policy.parameters(), self.params["max_grad_norm"]
+            )  # 防止梯度爆炸
+            self.optimizer.step()
+    
+    def learn(self):
+        """
+        学习，对象调用的内容
+        """
+        for i in range(0, self.params["train_total_episodes"]):
+            print(f"正在训练第{i}轮：", end="", flush=True)
+            # 0. 清空经验
+            self.reset_rb()
+            # 1. 收集经验
+            self.collect_rollouts(i)
+            # 2. 计算优势和回报
+            self.compute_advantage_and_return()
+            # 3. 训练
+            self.train()
+            print(f"当前总胜率:{self.win_tims/(i+1)}, 最近n场胜率：{np.mean(self.last_n_win)}")
         print(f"总胜率:{self.win_tims/self.params['train_total_episodes']}")

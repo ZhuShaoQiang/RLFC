@@ -9,14 +9,15 @@ import sys
 import os
 sys.path.append(os.getcwd())
 import torch
+from torch import nn
 
-from Lib.algorithms import VanillaPPO_dqn
-from Lib.network import DqnPolicy
+from Lib.algorithms import PPO_RLFC
+from Lib.models import RLFCScorer, DqnRLFC
 from Lib.envwrappers import ToTensorWrapper
 from Lib.utils import set_seed
 
 # 导入参数
-from config.grid_cliffwalking_dqn_ppo import params
+from config.grid_cliffwalking_rlfc import params
 
 def main():
     # 创建日志和保存的文件夹
@@ -28,12 +29,24 @@ def main():
     
     env = ToTensorWrapper(env=env)
     # env.reset(seed=params["seed"])  # 如果使用gym的环境，这句话可以设定随机种子，但是我们这个环境不涉及随机，不需要设置
-    policy = DqnPolicy(
+
+    # 加载经验打分器
+    scorer = RLFCScorer(
+        input_dim=params["total_row"]*params["total_col"]*3, output_dim=1, activation=params["scorer_activation"],
+        hidden=[32*3, 16*3], last_activation=nn.Sigmoid()
+    ).to(params["device"])
+    scorer.load_state_dict(
+        torch.load(params["SCORER_PATH"]), strict=True
+    )  # 加载预训练的模型
+
+    # 加载普通的Dqn网络
+    policy = DqnRLFC(
         input_dim=env.obs_space, output_dim=4, activation=params["activation"],
         hidden=[32, 16], last_activation=None
     )
     
-    model = VanillaPPO_dqn(env=env, policy=policy, params=params)
+    # 加载算法
+    model = PPO_RLFC(env=env, policy=policy, scorer=scorer, params=params)
     model.learn()
 
 
