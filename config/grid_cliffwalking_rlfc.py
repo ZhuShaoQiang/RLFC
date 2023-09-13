@@ -21,8 +21,8 @@ params = {
     "last_n_avg_rewards": 50,
     "seed": 42,
     "epsilon_decay": True,  # 是否衰减epsilon
-    "min_epsilon": 0.05,  # 最小的探索率
-    "init_epsilon": 1.0,  # 最初始的探索率，会覆盖掉上面的epsilon
+    "min_epsilon": 0.00,  # 最小的探索率
+    "init_epsilon": 0.2,  # 最初始的探索率，会覆盖掉上面的epsilon
     "decay_ratio": 0.99,  # 衰减率
 
     "device": torch.device("cuda"),
@@ -32,7 +32,7 @@ params = {
     "entropy_coef": 0.0,
     "value_loss_coef": 0.5,
     "max_grad_norm": 0.5,
-    "scorer_eps": 0,  # 用于乘给打分器作为一个系数
+    "scorer_eps": 0.2,  # 用于乘给打分器作为一个系数
     # 这个分数为0的时候，应该就是普通的dqn
 
     "env": CliffWalking,
@@ -43,7 +43,7 @@ params = {
     "total_col": 12,
     "total_row": 4,
 
-    "LOGS_PATH": "./ckp/LOGS/cliffwalking_DQN_rlfc_0_w_decay0.05/",
-    "SAVE_PATH": "./ckp/OUT/cliffwalking_DQN_rlfc_0_w_decay0.05/",
+    "LOGS_PATH": "./ckp/LOGS/cliffwalking_DQN_rlfc_0.2_w_decay0.2_0.0/",
+    "SAVE_PATH": "./ckp/OUT/cliffwalking_DQN_rlfc_0.2_w_decay0.2_0.0/",
     "SCORER_PATH": "./ckp/OUT/cliffwalking_DQN_rlfc/scorer.pth",
 }
