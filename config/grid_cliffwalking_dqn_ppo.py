@@ -6,7 +6,7 @@ import torch
 from Lib.env import CliffWalking
 
 params = {
-    "train_total_episodes": 2000,  # 总共训练的episode总数
+    "train_total_episodes": 1000,  # 总共训练的episode总数
     "train_num_epoch": 10,  # 每个episode之后重复训练多少次
     "batch_size": 64,
     "buffer_size": 1001,  # 这个是最大值

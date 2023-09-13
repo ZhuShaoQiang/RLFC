@@ -124,7 +124,7 @@ class VanillaPPO_dqn(BaseAlgorithm):
             # 采样动作
             action_to_take = self.policy.sample_action(action_values, self.params["epsilon"])
             # 得到当前动作的预估价值
-            action_to_take_value = action_values[action_to_take]
+            # action_to_take_value = action_values[action_to_take]
 
             state_next, reward, win, die, _ = self.env.step(action=action_to_take)
             done = win or die
@@ -147,7 +147,6 @@ class VanillaPPO_dqn(BaseAlgorithm):
                 self.logger.record_num("episode reward", self.episode_reward, episode_num)
                 self.logger.record_num("last n avg reward", self.last_n_avg_reward, episode_num)
                 self.logger.record_num("last n win ratio", np.mean(self.last_n_win), episode_num)
-
                 return
             # fi done
 
@@ -212,13 +211,6 @@ class VanillaPPO_dqn(BaseAlgorithm):
             self.train()
             print(f"当前总胜率:{self.win_tims/(i+1)}, 最近n场胜率：{np.mean(self.last_n_win)}")
         print(f"总胜率:{self.win_tims/self.params['train_total_episodes']}")
-
-class FVRL_GRID(BaseAlgorithm):
-    """
-    自己的算法，但是是网格世界版本
-    """
-    def __init__(self, env: Env, params: dict, policy: BaseNetwork) -> None:
-        super().__init__(env, params)
 
 class VanillaPPO(BaseAlgorithm):
     """
@@ -373,6 +365,9 @@ class PPO_RLFC(BaseAlgorithm):
         self.loss_fn = torch.nn.MSELoss()
         self.win_tims = 0
         self.last_n_win = []  # 记录最近10场胜利情况，胜利为1，失败为0
+        # 判断是否需要衰减探索率
+        if self.params["epsilon_decay"]:
+            self.params["epsilon"] = self.params["init_epsilon"]
     
     @torch.no_grad()
     def collect_rollouts(self, episode_num):
@@ -394,14 +389,15 @@ class PPO_RLFC(BaseAlgorithm):
             # 采样动作
             action_to_take = self.policy.sample_action(action_values, self.params["epsilon"])
             # 得到当前动作的预估价值
-            action_to_take_value = action_values[action_to_take]
+            # action_to_take_value = action_values[action_to_take]
 
             state_next, reward, win, die, _ = self.env.step(action=action_to_take)
+
+            ### 计算分数
             state_next = state_next.to(self.params["device"])
             s2 = state_next
             # state_next就是s2
-
-            # 根据现在的状态，下一个状态，得到与专家经验相符的分数
+            # 根据前一个状态，现在的状态，下一个状态，得到与专家经验相符的分数
             tmp = torch.cat([s0, s1, s2], dim=1)
             score = self.scorer.forward(tmp).item()*self.params["scorer_eps"]
             
@@ -426,7 +422,6 @@ class PPO_RLFC(BaseAlgorithm):
                 self.logger.record_num("episode reward", self.episode_reward, episode_num)
                 self.logger.record_num("last n avg reward", self.last_n_avg_reward, episode_num)
                 self.logger.record_num("last n win ratio", np.mean(self.last_n_win), episode_num)
-
                 return
             # fi done
 
@@ -492,5 +487,10 @@ class PPO_RLFC(BaseAlgorithm):
             self.compute_advantage_and_return()
             # 3. 训练
             self.train()
+            ### 训练一轮衰减一次探索率
+            if self.params["epsilon_decay"]:
+                self.params["epsilon"] = self.params["epsilon"] * self.params["decay_ratio"]
+                self.params["epsilon"] = max(self.params["epsilon"], self.params["min_epsilon"])
+
             print(f"当前总胜率:{self.win_tims/(i+1)}, 最近n场胜率：{np.mean(self.last_n_win)}")
         print(f"总胜率:{self.win_tims/self.params['train_total_episodes']}")

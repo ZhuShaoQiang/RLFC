@@ -69,7 +69,7 @@ class RLFCScorer(BaseModel):
         score = self.nn.forward(x)
         return score
             
-class DqnRLFC(BaseModel):
+class DQN(BaseModel):
     """
     自己想法的DQN版本，低维输入，低维输出
     """
