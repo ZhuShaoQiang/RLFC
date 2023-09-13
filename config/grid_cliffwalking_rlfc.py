@@ -20,8 +20,8 @@ params = {
     "lr": 0.001,
     "last_n_avg_rewards": 50,
     "seed": 42,
-    "epsilon_decay": False,  # 是否衰减epsilon
-    "min_epsilon": 0.0,  # 最小的探索率
+    "epsilon_decay": True,  # 是否衰减epsilon
+    "min_epsilon": 0.05,  # 最小的探索率
     "init_epsilon": 1.0,  # 最初始的探索率，会覆盖掉上面的epsilon
     "decay_ratio": 0.99,  # 衰减率
 
@@ -43,7 +43,7 @@ params = {
     "total_col": 12,
     "total_row": 4,
 
-    "LOGS_PATH": "./ckp/LOGS/cliffwalking_DQN_rlfc_0_wo_decay/",
-    "SAVE_PATH": "./ckp/OUT/cliffwalking_DQN_rlfc_0_wo_decay/",
+    "LOGS_PATH": "./ckp/LOGS/cliffwalking_DQN_rlfc_0_w_decay0.05/",
+    "SAVE_PATH": "./ckp/OUT/cliffwalking_DQN_rlfc_0_w_decay0.05/",
     "SCORER_PATH": "./ckp/OUT/cliffwalking_DQN_rlfc/scorer.pth",
 }
