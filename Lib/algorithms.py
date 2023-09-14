@@ -10,7 +10,7 @@ from gym import Env
 
 from . import models
 from .network import BaseNetwork
-from .models import BaseModel
+from .models import BaseModel, DQN
 from .replaybuffer import ReplayBuffer
 from .logger import Logger
 
@@ -96,7 +96,7 @@ class VanillaPPO_dqn(BaseAlgorithm):
     """
     DQN的PPO的算法
     """
-    def __init__(self, env: Env, params: dict, policy: BaseNetwork) -> None:
+    def __init__(self, env: Env, params: dict, policy: DQN) -> None:
         super().__init__(env, params)
         self.policy = policy.to(self.params["device"])
         self.optimizer = self.params["optimizer"](
