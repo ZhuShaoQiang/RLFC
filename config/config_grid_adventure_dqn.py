@@ -8,7 +8,7 @@ from Lib.env import Adventure
 params = {
     # 下面是训练经验打分器的部分
     "onehot": True,
-    "train_scorer_epoch": 200,  # 打分器训练多少epoch
+    "train_scorer_epoch": 100,  # 打分器训练多少epoch
     "scorer_activation": torch.nn.LeakyReLU(),
 
     # 下面是训练RL算法的设置
