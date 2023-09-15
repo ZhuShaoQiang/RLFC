@@ -205,7 +205,7 @@ class Adventure(BaseGrid):
         one_hot: step和reset返回的坐标是否是one_hot向量（但仍然会保留非one_hot的坐标）
         """
         self.total_step = 0  # 设置最大步数上限
-        self.max_step = 1000  # 最大1K步
+        self.max_step = 100  # 最大1K步
         # 这个不分赢不赢，就是到终点
         self.win_pos = np.array([self.total_row-1, self.total_col-1], dtype=np.int8)
         # 就是那两个陷阱的位置
@@ -322,5 +322,6 @@ class Adventure(BaseGrid):
             return 3
         if np.any(np.all(self.pos == self.G6_pos, axis=1)) and self.vis[self.pos[0], self.pos[1]] == 0:
             self.vis[self.pos[0], self.pos[1]] = 1  # 赋值为1
+            print("\ngeti G6\n")
             return 6
         return 0

@@ -14,7 +14,7 @@ import torch
 from torch import nn
 
 # 导入参数
-from config.config_grid_adventure_dqn import params
+from config.config_grid_adventure_dqn_rlfc import params
 from Lib.models import RLFCScorer
 from Lib.utils import set_seed
 
