@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 """
-网格世界版本
-使用DQN和rlfc学习cliffwalking,这个dqn是经典的带回放缓冲区的dqn
+这个py文件是我设计的第二个网格世界的实验，这个文件使用dqn实现这个环境的行走
+但是这里加入了经验打分器
 """
 
 import sys
@@ -11,14 +11,13 @@ sys.path.append(os.getcwd())
 import torch
 from torch import nn
 
-from Lib.algorithms import DQN_RLFC
-from Lib.models import RLFCScorer
-from Lib.models import DQN as Q
+from Lib.algorithms import PPO_RLFC
+from Lib.models import RLFCScorer, DQN
 from Lib.envwrappers import ToTensorWrapper
 from Lib.utils import set_seed
 
 # 导入参数
-from config.grid_cliffwalking_dqn_rlfc import params
+from config.config_grid_adventure_dqn_rlfc_4_12 import params
 
 def main():
     # 创建日志和保存的文件夹
@@ -31,8 +30,8 @@ def main():
     env = ToTensorWrapper(env=env)
     # env.reset(seed=params["seed"])  # 如果使用gym的环境，这句话可以设定随机种子，但是我们这个环境不涉及随机，不需要设置
 
-    # 加载普通的Dqn网络Q
-    policy = Q(
+    # 加载普通的Dqn网络
+    policy = DQN(
         input_dim=env.obs_space, output_dim=4, activation=params["activation"],
         hidden=[32, 16], last_activation=None
     )
@@ -47,7 +46,7 @@ def main():
     )  # 加载预训练的模型
     
     # 加载算法
-    model = DQN_RLFC(env=env, policy=policy, scorer=scorer, params=params)
+    model = PPO_RLFC(env=env, policy=policy, scorer=scorer, params=params)
     model.learn()
 
 

@@ -3,13 +3,16 @@
 from .exp import ExpLoader
 from .cliffwalking_exp.exp import generate_exps as cw_exp_generator
 from .adventure_exp.exp import generate_exps as adventure_exp_generator
+from .adventure_exp_4_12.exp import generate_exps as adventure_4_12_exp_generator
 
 CLIFFWALKING_EXP = "cliffwalking_exp"
 ADVENTURE_EXP = "adventure_exp"
+ADVENTURE_EXP_4_12 = "adventure_exp_4_12"
 
 __exps = {
     CLIFFWALKING_EXP: cw_exp_generator,
     ADVENTURE_EXP: adventure_exp_generator,
+    ADVENTURE_EXP_4_12: adventure_4_12_exp_generator,
 }
 
 def initialize_exp(exp_name, params, split_ratio:float=0.3) -> ExpLoader:

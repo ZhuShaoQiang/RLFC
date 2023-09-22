@@ -5,10 +5,12 @@ class ReplayBuffer(object):
     def __init__(self, max_size):
         self.buffer = []
         self.max_size = max_size
+        self.idx = -1  # 指明当前插入的idx位置
     
     def put(self, experience):
         self.buffer.append(experience)
-        if len(self.buffer) > self.max_size:
+        self.idx = self.idx + 1
+        if (self.idx+1) > self.max_size:
             self.buffer.pop(0)
     
     def get(self, batch_size):
@@ -20,5 +22,5 @@ class ReplayBuffer(object):
     
     @property
     def size(self):
-        return len(self.buffer)
+        return self.idx + 1
     

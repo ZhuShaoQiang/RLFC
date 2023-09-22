@@ -20,7 +20,7 @@ class BaseAlgorithm(ABC):
     """
     本文件所有的算法都会继承这个类，作为基础算法
     """
-    def __init__(self, env: Env, params: dict) -> None:
+    def __init__(self, env: Env, params: dict, policy: BaseModel) -> None:
         """
         env: 环境
         params: 一个字典，是config文件中的配置文件信息中的字典
@@ -28,6 +28,7 @@ class BaseAlgorithm(ABC):
         super().__init__()
         self.env = env
         self.params = params
+        self.policy = policy.to(params["device"])
         self.rb = ReplayBuffer(params["buffer_size"])
 
         if "LOGS_PATH" in self.params and self.params["LOGS_PATH"] != "":
@@ -35,15 +36,86 @@ class BaseAlgorithm(ABC):
         else:
             self.logger = None
 
+        # 设定策略的优化器
+        self.policy_optimizer = self.params["optimizer"](
+            self.policy.parameters(), lr=self.params["lr"]
+        )
+        # 判断是否需要衰减探索率
+        if self.params["epsilon_decay"]:
+            self.params["epsilon"] = self.params["init_epsilon"]
+
         self.episode_reward = 0
         self.episodes_reward = []
+        self.last_n_win = []  # 记录最近10场胜利情况，胜利为1，失败为0
     
-    @abstractmethod
-    def collect_rollouts(self):
+    @torch.no_grad()
+    def collect_rollouts(self, episode_num):
         """
         收集经验，在这里每次收集一轮，而不是固定步数（因为这个任务太简单了）
+        这里写的是一个最基础的版本
         """
-        raise f"在Base Algorithm中未实现这个方法 collect_rollouts，请在继承类中重写"
+        # 设定为评估模式
+        self.policy.eval()
+        self.episode_reward = 0
+
+        # 重置环境
+        state, info = self.env.reset()  # [1, state_dim]
+        state = state.to(self.params["device"])
+        while True:
+            # 通过网络，得到当前状态的各个动作的价值
+            # 计算动作，由于这个网络产生的是argmax产生得一个值，所以ori_action和action_to_take应该是一样的
+            ori_action, action_to_take = self.predict(state)
+            # action_values = self.policy.forward(x=state).squeeze()
+            # 采样动作
+            # action_to_take = self.policy.sample_action(action_values, self.params["epsilon"])
+            # 得到当前动作的预估价值
+            # action_to_take_value = action_values[action_to_take]
+
+            # 在环境中采取这个步骤
+            state_next, reward, win, die, info = self.env.step(action_to_take)
+            done = win or die
+
+            ### 记录内容，动作应该记录产生的，而不是采取的
+            self.cache(state, ori_action, reward, state_next, done, info)
+            self.episode_reward += reward
+            
+            if done:
+                self.episodes_reward.append(self.episode_reward)
+
+                # 记录胜利记录
+                if win:
+                    self.last_n_win.append(1)
+                    self.win_tims += 1
+                else:
+                    self.last_n_win.append(0)
+                self.last_n_win = self.last_n_win[-self.params["last_n_avg_rewards"]:]
+                
+                ### 每回合记录日志
+                self.log(episode_num)
+                # self.logger.record_num("episode reward", self.episode_reward, episode_num)
+                # self.logger.record_num("last n avg reward", self.last_n_avg_reward, episode_num)
+                # self.logger.record_num("last n win ratio", np.mean(self.last_n_win), episode_num)
+                print(f"近n轮平均回报:{self.last_n_avg_reward}, 本轮回报：{self.episode_reward}; ", end="")
+                return
+            # fi done
+
+            state = state_next.to(self.params["device"])
+
+    @abstractmethod
+    def predict(self, x, deterministic=False):
+        """
+        计算应该采取的动作，只计算动作
+        x: 输入的状态
+        deterministic: 是否确定性采取动作
+        """
+        raise f"在Base Algorithm中未实现这个方法，这个应该在视线中实现"
+    @abstractmethod
+    def log(self, episode_num):
+        """
+        记录日志，记录什么由具体实现决定
+        episode_num: 多少个episode
+        """
+        raise f"在Base Algorithm中未实现这个方法，这个应该在视线中实现"
     
     @abstractmethod
     def compute_advantage_and_return(self):
@@ -61,7 +133,7 @@ class BaseAlgorithm(ABC):
         raise f"BaseAlgorithm中未实现此算法，需要具体实现"
 
     @abstractmethod
-    def learn(self, total_timestep):
+    def learn(self):
         """
         学习
         total_timestep: 总共训练的时间步数量
@@ -97,8 +169,7 @@ class VanillaPPO_dqn(BaseAlgorithm):
     DQN的PPO的算法
     """
     def __init__(self, env: Env, params: dict, policy: DQN) -> None:
-        super().__init__(env, params)
-        self.policy = policy.to(self.params["device"])
+        super().__init__(env, params, policy)
         self.optimizer = self.params["optimizer"](
             self.policy.parameters(), lr=self.params["lr"]
         )
@@ -217,8 +288,7 @@ class VanillaPPO(BaseAlgorithm):
     普通的PPO的算法
     """
     def __init__(self, env: Env, params: dict, policy: BaseNetwork) -> None:
-        super().__init__(env, params)
-        self.policy = policy.to(self.params["device"])
+        super().__init__(env, params, policy)
         self.optimizer = self.params["optimizer"](
             self.policy.parameters(), lr=self.params["lr"]
         )
@@ -356,8 +426,7 @@ class PPO_RLFC(BaseAlgorithm):
         policy: 策略网络
         scorer: 打分器
         """
-        super().__init__(env, params)
-        self.policy = policy.to(self.params["device"])
+        super().__init__(env, params, policy)
         self.scorer = scorer.to(self.params["device"]).requires_grad_(False)
         self.optimizer = self.params["optimizer"](
             self.policy.parameters(), lr=self.params["lr"]
@@ -494,3 +563,390 @@ class PPO_RLFC(BaseAlgorithm):
 
             print(f"当前总胜率:{self.win_tims/(i+1)}, 最近n场胜率：{np.mean(self.last_n_win)}")
         print(f"总胜率:{self.win_tims/self.params['train_total_episodes']}")
+
+
+class DQN(BaseAlgorithm):
+    """
+    DQN的算法，不同于另一个程序中的DQN策略
+    """
+    def __init__(self, env: Env, params: dict, policy: BaseModel) -> None:
+        """
+        env: 环境
+        params: 一个字典，是config文件中的配置文件信息中的字典
+        policy: 我们的策略网络，可能是AC，可能是Q网络，但是这里是Q网络
+        """
+        super().__init__(env, params, policy)
+        self.loss_fn = torch.nn.MSELoss()
+        self.win_tims = 0
+        self.run_episode = 0  # 运行了多少个回合了
+        self.run_steps = 0  # 运行了多少步了
+        self._last_obs = None  # 记录上一个obs
+    
+    def compute_advantage_and_return(self):
+        """
+        根据收集到的经验，计算优势和回报
+        这个使用的是原本的collect rollouts
+        0       1          2        3           4    5
+        state, ori_action, reward, state_next, done, info
+        """
+        pass
+
+    @torch.no_grad()
+    def collect_rollouts(self):
+        """
+        这里重新写收集。因为这里不设置最大步数，所以应该手动设置每x步训练一次
+        params里有一个参数：train_freq，这个是收集步骤数
+        """
+        # 设定为评估模式
+        self.policy.eval()
+
+        if self._last_obs == None:
+            # 重置环境
+            self._last_obs, info = self.env.reset()  # [1, state_dim]
+            self._last_obs = self._last_obs.to(self.params["device"])
+        while True:
+            self.run_steps += 1
+            # 通过网络，得到当前状态的各个动作的价值
+            # 计算动作，由于这个网络产生的是argmax产生得一个值，所以ori_action和action_to_take应该是一样的
+            ori_action, action_to_take = self.predict(self._last_obs)
+            # action_values = self.policy.forward(x=state).squeeze()
+            # 采样动作
+            # action_to_take = self.policy.sample_action(action_values, self.params["epsilon"])
+            # 得到当前动作的预估价值
+            # action_to_take_value = action_values[action_to_take]
+
+            # 在环境中采取这个步骤
+            state_next, reward, win, die, info = self.env.step(action_to_take)
+            done = win or die
+
+            ### 记录内容，动作应该记录产生的，而不是采取的
+            self.cache(self._last_obs, ori_action, reward, state_next, done, info)
+            self.episode_reward += reward
+            
+            if done:  # 每次环境结束时才记录日志
+                self.run_episode += 1
+                self.episode_reward = 0
+                self.episodes_reward.append(self.episode_reward)
+
+                # 记录胜利记录
+                if win:
+                    self.last_n_win.append(1)
+                    self.win_tims += 1
+                else:
+                    self.last_n_win.append(0)
+                self.last_n_win = self.last_n_win[-self.params["last_n_avg_rewards"]:]
+                
+                ### 每回合记录日志
+                self.log(self.run_episode)
+                # self.logger.record_num("episode reward", self.episode_reward, episode_num)
+                # self.logger.record_num("last n avg reward", self.last_n_avg_reward, episode_num)
+                # self.logger.record_num("last n win ratio", np.mean(self.last_n_win), episode_num)
+                print(f"近n轮平均回报:{self.last_n_avg_reward}, 本轮回报：{self.episode_reward};")
+
+                self._last_obs, info = self.env.reset()  # [1, state_dim]
+                self._last_obs = self._last_obs.to(self.params["device"])
+                # return
+            else:  # 如果结束了，记录一次运行的日志，并重置环境，如果没结束，只是拿到下一个时刻的状态
+                self._last_obs = state_next.to(self.params["device"])
+            # fi done
+
+            if self.run_steps >= self.params["learning_starts"]:
+                if self.run_steps % self.params["train_freq"] == 0:
+                    # 说明不应该收集了，break
+                    break
+            if self.params["total_timesteps"] <= self.run_steps:  # 结束了
+                return "done"
+        
+    def train(self):
+        """
+        根据收集到的经验，计算优势和回报
+        这个使用的是原本的collect rollouts
+        0       1          2        3           4    5
+        state, ori_action, reward, state_next, done, info
+        """
+        self.policy.train()
+
+        for _ in range(self.params["train_num_epochs"]):
+            experiences = self.rb.get(self.params["batch_size"])
+
+            states = torch.stack([e[0] for e in experiences]).squeeze(1).to(self.params["device"])
+            states_next = torch.stack([e[3] for e in experiences]).squeeze(1).to(self.params["device"])
+            old_actions = torch.tensor([e[1] for e in experiences], device=self.params["device"]).squeeze()
+            rewards = torch.tensor([e[2] for e in experiences], device=self.params["device"], dtype=torch.float)
+            dones = torch.tensor([e[4] for e in experiences], device=self.params["device"], dtype=torch.float)
+
+            # 需要先计算一下，下一个状态下最大的价值下标，即认为下一步是贪心选择的动作
+            with torch.no_grad():
+                next_values, next_values_max_idx = self.policy(states_next).max(dim=1)  # 找到最大的动作对应的价值
+                # 计算目标的价值
+                target_q_values = rewards + (1-dones)*self.params["gamma"]*next_values
+
+            # 拿到当前网络下，这些状态的预估价值
+            action_values = self.policy.forward(states)
+            # 拿到之前执行的动作的当前的value，好像gather就能实现下面的内容，到时候试一试
+            # pred_values = torch.gather(action_values, dim=1, index=old_actions.long())
+            pred_values = action_values[range(len(experiences)), old_actions]
+
+            ### 计算损失
+            loss = self.loss_fn(target_q_values, pred_values)
+
+            self.policy_optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                self.policy.parameters(), self.params["max_grad_norm"]
+            )  # 防止梯度爆炸
+            self.policy_optimizer.step()
+    
+    def predict(self, x, deterministic=False):
+        """
+        通过自己的网络预测下一步的动作
+        """
+        # 得到网络的输出
+        dist = self.policy.forward(x).squeeze()
+
+        # 从输出中采样动作
+        action_to_take = self.policy.sample_action(dist, deterministic)
+        return action_to_take, action_to_take
+    
+    def log(self, episode_num):
+        """
+        """
+        if self.logger != None:
+            self.logger.record_num("episode reward", self.episode_reward, episode_num)
+            self.logger.record_num("last n avg reward", self.last_n_avg_reward, episode_num)
+            self.logger.record_num("last n win ratio", np.mean(self.last_n_win), episode_num)
+
+    def learn(self):
+        """
+        学习
+        total_timestep: 总共训练的时间步数量
+        """
+        # for i in range(0, self.params["train_total_episodes"]):
+        while True:
+            # print(f"正在训练第{i}轮：", end="", flush=True)
+            # 0. 清空经验
+            # TODO: 普通的DQN不清空经验
+            self.reset_rb()
+            # 1. 收集经验
+            tmp = self.collect_rollouts()
+
+            # 2. 计算优势和回报
+            self.compute_advantage_and_return()
+            # 3. 训练
+            self.train()
+            print(f"当前总步数：{self.run_steps}, 当前总胜率:{self.win_tims/(self.run_episode)}, 最近n场胜率：{np.mean(self.last_n_win)}, 当前探索率：{self.params['epsilon']}")
+
+            # 设定探索率衰减
+            if self.params["epsilon_decay"]:
+                self.params["epsilon"] = self.params["epsilon"] * self.params["decay_ratio"]
+                self.params["epsilon"] = max(self.params["epsilon"], self.params["min_epsilon"])
+            if tmp == "done":
+                break
+
+        print(f"当前总步数：{self.run_steps}, 总胜率:{self.win_tims/self.run_episode}")
+
+    def reset_rb(self):
+        """
+        在DQN中不需重置，设定了30w的上限
+        """
+        pass
+    
+
+class DQN_RLFC(BaseAlgorithm):
+    """
+    DQN的算法，加上我的idea
+    """
+    def __init__(self, env: Env, params: dict, policy: BaseModel, scorer: BaseModel) -> None:
+        """
+        env: 环境
+        params: 一个字典，是config文件中的配置文件信息中的字典
+        policy: 我们的策略网络，可能是AC，可能是Q网络，但是这里是Q网络
+        """
+        super().__init__(env, params, policy)
+        self.scorer = scorer.to(self.params["device"]).requires_grad_(False)
+        self.loss_fn = torch.nn.MSELoss()
+        self.win_tims = 0
+        self.run_episode = 0  # 运行了多少个回合了
+        self.run_steps = 0  # 运行了多少步了
+        self._last_obs = None  # 记录上一个obs
+        self.s1 = None
+        self.s2 = None
+        self.s3 = None
+    
+    def compute_advantage_and_return(self):
+        """
+        根据收集到的经验，计算优势和回报
+        这个使用的是原本的collect rollouts
+        0       1          2        3           4    5
+        state, ori_action, reward, state_next, done, info
+        """
+        pass
+
+    @torch.no_grad()
+    def collect_rollouts(self):
+        """
+        这里重新写收集。因为这里不设置最大步数，所以应该手动设置每x步训练一次
+        params里有一个参数：train_freq，这个是收集步骤数
+        """
+        # 设定为评估模式
+        self.policy.eval()
+
+        if self._last_obs == None:
+            # 重置环境
+            self._last_obs, info = self.env.reset()  # [1, state_dim]
+            self._last_obs = self._last_obs.to(self.params["device"])
+            self.s1 = torch.zeros_like(self._last_obs)
+            self.s2 = self._last_obs  # 最初的时候，s1为全0
+        while True:
+            self.run_steps += 1
+            # 通过网络，得到当前状态的各个动作的价值
+            # 计算动作，由于这个网络产生的是argmax产生得一个值，所以ori_action和action_to_take应该是一样的
+            ori_action, action_to_take = self.predict(self._last_obs)
+            # action_values = self.policy.forward(x=state).squeeze()
+            # 采样动作
+            # action_to_take = self.policy.sample_action(action_values, self.params["epsilon"])
+            # 得到当前动作的预估价值
+            # action_to_take_value = action_values[action_to_take]
+
+            # 在环境中采取这个步骤
+            state_next, reward, win, die, info = self.env.step(action_to_take)
+            self.s3 = state_next.to(self.params["device"])
+            done = win or die
+            
+            ### 计算打分器中这个多少分
+            tmp = torch.cat([self.s1, self.s2, self.s3], dim=1)
+            score = self.scorer.forward(tmp)*self.params["scorer_eps"]
+
+            ### 记录内容，动作应该记录产生的，而不是采取的
+            # 存储的奖励也是通过我们的score正则过的奖励
+            # 不需要对score单独储存了，因为我们储存的reward已经包含了score了
+            self.cache(self._last_obs, ori_action, reward+score, state_next, done, info)
+            self.episode_reward += reward
+            
+            if done:  # 每次环境结束时才记录日志
+                self.run_episode += 1
+                self.episode_reward = 0
+                self.episodes_reward.append(self.episode_reward)
+
+                # 记录胜利记录
+                if win:
+                    self.last_n_win.append(1)
+                    self.win_tims += 1
+                else:
+                    self.last_n_win.append(0)
+                self.last_n_win = self.last_n_win[-self.params["last_n_avg_rewards"]:]
+                
+                ### 每回合记录日志
+                self.log(self.run_episode)
+                # self.logger.record_num("episode reward", self.episode_reward, episode_num)
+                # self.logger.record_num("last n avg reward", self.last_n_avg_reward, episode_num)
+                # self.logger.record_num("last n win ratio", np.mean(self.last_n_win), episode_num)
+                print(f"近n轮平均回报:{self.last_n_avg_reward}, 本轮回报：{self.episode_reward};")
+
+                self._last_obs, info = self.env.reset()  # [1, state_dim]
+                self._last_obs = self._last_obs.to(self.params["device"])
+                # return
+            else:  # 如果结束了，记录一次运行的日志，并重置环境，如果没结束，只是拿到下一个时刻的状态
+                self._last_obs = state_next.to(self.params["device"])
+            # fi done
+
+            if self.run_steps >= self.params["learning_starts"]:
+                if self.run_steps % self.params["train_freq"] == 0:
+                    # 说明不应该收集了，break
+                    break
+            if self.params["total_timesteps"] <= self.run_steps:  # 结束了
+                return "done"
+        
+    def train(self):
+        """
+        根据收集到的经验，计算优势和回报
+        这个使用的是原本的collect rollouts
+        0       1          2               3           4    5
+        state, ori_action, reward+score, state_next, done, info
+        """
+        self.policy.train()
+
+        for _ in range(self.params["train_num_epochs"]):
+            experiences = self.rb.get(self.params["batch_size"])
+
+            states = torch.stack([e[0] for e in experiences]).squeeze(1).to(self.params["device"])
+            states_next = torch.stack([e[3] for e in experiences]).squeeze(1).to(self.params["device"])
+            old_actions = torch.tensor([e[1] for e in experiences], device=self.params["device"]).squeeze()
+            rewards = torch.tensor([e[2] for e in experiences], device=self.params["device"], dtype=torch.float)
+            dones = torch.tensor([e[4] for e in experiences], device=self.params["device"], dtype=torch.float)
+
+            # 需要先计算一下，下一个状态下最大的价值下标，即认为下一步是贪心选择的动作
+            with torch.no_grad():
+                next_values, _ = self.policy(states_next).max(dim=1)  # 找到最大的动作对应的价值
+                # 计算目标的价值
+                target_q_values = rewards + (1-dones)*self.params["gamma"]*next_values
+
+            # 拿到当前网络下，这些状态的预估价值
+            action_values = self.policy.forward(states)
+            # 拿到之前执行的动作的当前的value，好像gather就能实现下面的内容，到时候试一试
+            # pred_values = torch.gather(action_values, dim=1, index=old_actions.long())
+            pred_values = action_values[range(len(experiences)), old_actions]
+
+            ### 计算损失
+            loss = self.loss_fn(target_q_values, pred_values)
+
+            self.policy_optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                self.policy.parameters(), self.params["max_grad_norm"]
+            )  # 防止梯度爆炸
+            self.policy_optimizer.step()
+    
+    def predict(self, x, deterministic=False):
+        """
+        通过自己的网络预测下一步的动作
+        """
+        # 得到网络的输出
+        dist = self.policy.forward(x).squeeze()
+
+        # 从输出中采样动作
+        action_to_take = self.policy.sample_action(dist, deterministic)
+        return action_to_take, action_to_take
+    
+    def log(self, episode_num):
+        """
+        """
+        if self.logger != None:
+            self.logger.record_num("episode reward", self.episode_reward, episode_num)
+            self.logger.record_num("last n avg reward", self.last_n_avg_reward, episode_num)
+            self.logger.record_num("last n win ratio", np.mean(self.last_n_win), episode_num)
+
+    def learn(self):
+        """
+        学习
+        total_timestep: 总共训练的时间步数量
+        """
+        # for i in range(0, self.params["train_total_episodes"]):
+        while True:
+            # print(f"正在训练第{i}轮：", end="", flush=True)
+            # 0. 清空经验
+            # TODO: 普通的DQN不清空经验
+            self.reset_rb()
+            # 1. 收集经验
+            tmp = self.collect_rollouts()
+
+            # 2. 计算优势和回报
+            self.compute_advantage_and_return()
+            # 3. 训练
+            self.train()
+            print(f"当前总步数：{self.run_steps}, 当前总胜率:{self.win_tims/(self.run_episode)}, 最近n场胜率：{np.mean(self.last_n_win)}, 当前探索率：{self.params['epsilon']}")
+
+            # 设定探索率衰减
+            if self.params["epsilon_decay"]:
+                self.params["epsilon"] = self.params["epsilon"] * self.params["decay_ratio"]
+                self.params["epsilon"] = max(self.params["epsilon"], self.params["min_epsilon"])
+            if tmp == "done":
+                break
+
+        print(f"当前总步数：{self.run_steps}, 总胜率:{self.win_tims/self.run_episode}")
+
+    def reset_rb(self):
+        """
+        在DQN中不需重置，设定了30w的上限
+        """
+        pass

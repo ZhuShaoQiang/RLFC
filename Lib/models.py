@@ -36,6 +36,15 @@ class BaseModel(nn.Module, ABC):
         输出：action, value, action_log_prob
         """
         raise f"在 Base Model 中未实现这个方法 forward，请在继承类中重写这个方法"
+    @abstractmethod
+    def sample_action(self, dist):
+        """
+        x: 输入的状态
+        deterministic: 是否确定性的取值
+
+        输出：action, value, action_log_prob
+        """
+        raise f"在 Base Model 中未实现这个方法 forward，请在继承类中重写这个方法"
 
 class RLFCScorer(BaseModel):
     """
@@ -68,6 +77,9 @@ class RLFCScorer(BaseModel):
         """
         score = self.nn.forward(x)
         return score
+    
+    def sample_action(self, dist):
+        pass
             
 class DQN(BaseModel):
     """
