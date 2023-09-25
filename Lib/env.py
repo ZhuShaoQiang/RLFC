@@ -324,7 +324,7 @@ class Adventure(BaseGrid):
         if np.any(np.all(self.pos == self.G6_pos, axis=1)) and self.vis[self.pos[0], self.pos[1]] == 0:
             self.vis[self.pos[0], self.pos[1]] = 1  # 赋值为1
             print("\ngeti G6\n")
-            return 6
+            return 20
         return 0
 
 class Adventure_4_12(BaseGrid):
@@ -486,5 +486,5 @@ class Adventure_4_12(BaseGrid):
         if np.any(np.all(self.pos == self.G6_pos, axis=1)) and self.vis[self.pos[0], self.pos[1]] == 0:
             self.vis[self.pos[0], self.pos[1]] = 1  # 赋值为1
             print("\ngeti G6\n")
-            return 10
+            return 100
         return 0

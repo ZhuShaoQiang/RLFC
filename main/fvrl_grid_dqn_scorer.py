@@ -17,7 +17,7 @@ import torch
 from torch import nn
 
 # 导入参数
-from config.grid_cliffwalking_rlfc import params
+from config.grid_cliffwalking_dqn_ppo_rlfc import params
 from Lib.models import RLFCScorer
 from Lib.utils import set_seed
 

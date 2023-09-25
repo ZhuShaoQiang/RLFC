@@ -626,7 +626,6 @@ class DQN(BaseAlgorithm):
             if done:  # 每次环境结束时才记录日志
                 self.run_episode += 1
                 self.episodes_reward.append(self.episode_reward)
-                self.episode_reward = 0
 
                 # 记录胜利记录
                 if win:
@@ -645,6 +644,7 @@ class DQN(BaseAlgorithm):
 
                 self._last_obs, info = self.env.reset()  # [1, state_dim]
                 self._last_obs = self._last_obs.to(self.params["device"])
+                self.episode_reward = 0
                 # return
             else:  # 如果结束了，记录一次运行的日志，并重置环境，如果没结束，只是拿到下一个时刻的状态
                 self._last_obs = state_next.to(self.params["device"])
@@ -826,7 +826,6 @@ class DQN_RLFC(BaseAlgorithm):
             if done:  # 每次环境结束时才记录日志
                 self.run_episode += 1
                 self.episodes_reward.append(self.episode_reward)
-                self.episode_reward = 0
 
                 # 记录胜利记录
                 if win:
@@ -845,6 +844,7 @@ class DQN_RLFC(BaseAlgorithm):
 
                 self._last_obs, info = self.env.reset()  # [1, state_dim]
                 self._last_obs = self._last_obs.to(self.params["device"])
+                self.episode_reward = 0
                 # return
             else:  # 如果结束了，记录一次运行的日志，并重置环境，如果没结束，只是拿到下一个时刻的状态
                 self._last_obs = state_next.to(self.params["device"])
@@ -934,7 +934,7 @@ class DQN_RLFC(BaseAlgorithm):
             self.compute_advantage_and_return()
             # 3. 训练
             self.train()
-            print(f"当前总步数：{self.run_steps}, 当前总胜率:{self.win_tims/(self.run_episode)}, 最近n场胜率：{np.mean(self.last_n_win)}, 当前探索率：{self.params['epsilon']}")
+            print(f"当前总步数：{self.run_steps}, 当前总胜率:{self.win_tims/(self.run_episode+1)}, 最近n场胜率：{np.mean(self.last_n_win)}, 当前探索率：{self.params['epsilon']}")
 
             # 设定探索率衰减
             if self.params["epsilon_decay"]:
