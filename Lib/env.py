@@ -205,7 +205,7 @@ class Adventure(BaseGrid):
         one_hot: step和reset返回的坐标是否是one_hot向量（但仍然会保留非one_hot的坐标）
         """
         self.total_step = 0  # 设置最大步数上限
-        self.max_step = 100  # 最大1K步
+        self.max_step = 1000  # 最大1K步
         # 这个不分赢不赢，就是到终点
         self.win_pos = np.array([self.total_row-1, self.total_col-1], dtype=np.int8)
         # 就是那两个陷阱的位置
@@ -262,19 +262,20 @@ class Adventure(BaseGrid):
 
         G = self.__G_score()
 
+        if G != 0:  # 只要不是0
+            reward = G
+        # 不赢的时候，就要看看有没有G分
+        # 不设最大步数了
         if win:
+            print("win in ", self.total_step)
             reward = self.goal_reward
-        else:
-            if self.total_step >= self.max_step:
-                # 一定步数走不完直接死
-                die = True
-            if G != 0:  # 只要不是0
-                reward = G
-            # 不赢的时候，就要看看有没有G分
-
         if die:
+            print("die in ", self.total_step)
             reward = self.dead_reward
-
+        # else:
+        #     if self.total_step >= self.max_step:
+        #         # 一定步数走不完直接死
+        #         die = True
         res_pos = self.__one_hot_pos() if self.one_hot else self.pos
         return res_pos, reward, win, die, {"win": win, "die": die, "pos": self.pos, "reward": reward}
     
