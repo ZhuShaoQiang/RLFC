@@ -17,6 +17,24 @@ def initialize(net: nn.Module):
         if len(p.data.shape) >= 2:
             orthogonal_(p.data)
 
+def compare_networks(net1: nn.Module, net2: nn.Module):
+    """
+    比较两个网络，先比较参数量，再比较参数是否相同
+    返回值：
+    0: 参数量同，参数也相同
+    -1: 参数量不同
+    1: 参数量同  参数不同
+    """
+    p1 = dict(net1.named_parameters())
+    p2 = dict(net2.named_parameters())
+
+    all_params_match = all(
+        param_a.shape == param_b.shape and torch.allclose(param_b, param_a) for (_, param_a), (_, param_b) in zip(p1.items(), p2.items())
+    )
+    if all_params_match:
+        return True
+    else:
+        return False
 
 def set_seed(seed):
     '''set seed for cuda 11.x'''

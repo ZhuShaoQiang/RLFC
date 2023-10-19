@@ -6,6 +6,8 @@ import torch
 from Lib.env import CliffWalking
 
 params = {
+    # dataset的配置
+    ""
     # 打分器的配置
     "scorer_activation": torch.nn.LeakyReLU(),
     "scorer_eps": 1,  # 打分器的系数

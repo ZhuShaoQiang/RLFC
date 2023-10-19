@@ -10,7 +10,7 @@ from gym import Env
 
 from . import models
 from .network import BaseNetwork
-from .models import BaseModel, DQN
+from .models import BaseModel, DQN, BaseAC, BaseQ
 from .replaybuffer import ReplayBuffer
 from .logger import Logger
 
@@ -38,7 +38,8 @@ class BaseAlgorithm(ABC):
 
         # 设定策略的优化器
         self.policy_optimizer = self.params["optimizer"](
-            self.policy.parameters(), lr=self.params["lr"]
+            self.policy.parameters(),
+            lr=self.params["lr"]
         )
         # 判断是否需要衰减探索率
         if self.params["epsilon_decay"]:
@@ -167,65 +168,109 @@ class BaseAlgorithm(ABC):
 class VanillaPPO(BaseAlgorithm):
     """
     普通的PPO的算法
+    按照每次收集固定长度内容的方法
     """
-    def __init__(self, env: Env, params: dict, policy: BaseNetwork) -> None:
+    def __init__(self, env: Env, params: dict, policy: BaseAC) -> None:
         super().__init__(env, params, policy)
+        print(self.policy.state_dict)
         self.optimizer = self.params["optimizer"](
             self.policy.parameters(), lr=self.params["lr"]
         )
         self.critic_loss_fn = torch.nn.MSELoss()
+        self._last_obs = None
         self.win_tims = 0
+        self.total_episodes = 0
+        self.next_state_value = 0
+        self.episode_reward = 0
     
     @torch.no_grad()
     def collect_rollouts(self):
         """
         收集一轮经验
+        一般环境都是1000最大步数
         """
         self.policy.eval()
-        self.episode_reward = 0
 
-        state, info = self.env.reset()  # [1, state_dim]
-        while True:
-            state = state.to(self.params["device"])
+        if self._last_obs == None:  # 就是第一次执行这个环境重置
+            self._last_obs, _ = self.env.reset()
 
-            action, value, action_log_prob = self.policy.forward(x=state)
+        for _ in range(0, self.params["buffer_size"]):
+            self._last_obs = self._last_obs.to(self.params["device"])
+            action_mean, value = self.policy.forward(x=self._last_obs)  # 得到action_mean,value
+            # 得到动作和action_log_prob
+            action, action_log_prob = self.policy.sample_action(action_mean)
 
-            action_to_take = action.cpu().item()  # 离散动作就是这样的
+            action_to_take = np.clip(
+                action.squeeze(0).cpu(), 
+                self.env.action_space.low,
+                self.env.action_space.high).numpy()
+
             state_next, reward, win, die, _ = self.env.step(action=action_to_take)
+            self.episode_reward += reward
             done = win or die
 
             ### 记录内容
-            self.cache(state, action, reward, value, done, action_log_prob, 0)
-            self.episode_reward += reward
+            self.cache(self._last_obs, action, reward, value, done, action_log_prob, 0, 0)
             
             if done:
+                # 记录各种内容
+                self.total_episodes += 1
                 self.episodes_reward.append(self.episode_reward)
-                print(f"近n轮平均回报:{self.last_n_avg_reward}, 本轮回报：{self.episode_reward}")
+                # print(f"近n轮平均回报:{self.last_n_avg_reward}, 本轮回报：{self.episode_reward}")
+                self.log(self.total_episodes)
+
+                # 记录完成，清理环境和各种内容
+                self.episode_reward = 0
                 if win:
                     self.win_tims += 1
-                return
-
-            state = state_next.to(self.params["device"])
+                
+                self._last_obs, _ = self.env.reset()
+            else:
+                self._last_obs = state_next
+        
+        # 拿到2048个数据之后，还要拿到第2049个状态的估计价值
+        self._last_obs = self._last_obs.to(self.params["device"])
+        self.next_state_value = self.policy.get_state_value_only(self._last_obs)
+        print(f"近n轮平均回报：{self.last_n_avg_reward}", flush=True)
 
     def compute_advantage_and_return(self):
         """
+        本地方修改自StableBaseline的PPO算法，但是删除了gae部分
+        因为要和PPO比较
         根据收集到的经验，计算优势和回报
-        0        1      2       3      4      5               6
-        state, action, reward, value, done, action_log_prob,   0
-        状态    动作    环境奖励  预估奖励  完成   动作概率         优势
-        现在这个算法是收集一整轮然后计算，所以可以直接倒着计算环境奖励的累计
+        0        1      2       3      4      5               6     7
+        state, action, reward, value, done, action_log_prob,  0,    0)
+        状态    动作    环境奖励  预估奖励  完成   动作概率         优势  return
+        这次的收集环境经验是固定数量收集，不是一回合一回合的收集
+        self.next_state_value: 需要用到第2049个状态的奖励，就是参数
         """
-        for idx in reversed(range(1, self.rb.size)):
-            # 若总长度是10,那么下标就是0 - 9, range(1, 10) >> 1, 2, ..., 9
-            # reverse之后，就是 9, 8, ..., 1
-            # 可以计算每个地方的环境累计奖励是   reward[idx-1] = reward[idx-1] + gamma*reward[idx]
-            # 若gamma=0.9
-            # -0.1, -0.1, -0.1, -0.1, 10 >>> -0.1, -0.1, -0.1, 8.9, 10 >> ...
-            # 下面这个步骤计算完之后，reward就变成return了
-            self.rb.buffer[idx-1][2] = self.rb.buffer[idx-1][2] + self.params["gamma"] * self.rb.buffer[idx][2]
+        last_gae_lam = 0  # 使用gae的算法
+        for idx in reversed(range(self.params["buffer_size"])):
+            is_not_done = 1 - self.rb.buffer[idx][4]  # 对done取反，则done了是0，未done是1
+            if self.params["buffer_size"] - 1 == idx:
+                # 如果是回放缓冲区的最后一个，则要查看第2049个状态的价值和当前是否结束
+                idx_plus_1_reward = self.next_state_value
+            else:
+                # 否则就直接用下一个状态的估计来叠加计算
+                # TODO: 改成下一个状态的环境的立即奖励是否更好?
+                idx_plus_1_reward = self.rb.buffer[idx+1][3]
+            
+            # 计算return = 当前环境立即奖励 + gamma * 下一步的估计奖励 * 当前未结束
+            # TODO: 为什么不是乘以下一步的环境的立即奖励
+            self.rb.buffer[idx][7] = self.rb.buffer[idx][2] + self.params["gamma"] * idx_plus_1_reward * is_not_done
 
-            # 下面计算advantage，如果从环境得到的立即回报 - 网络预估回报，说明这个动作值得执行，那么就可以执行
-            self.rb.buffer[idx][6] = self.rb.buffer[idx][2] - self.rb.buffer[idx][3]
+            # 计算advantage=当前实际回报 - 当前估计回报
+            # self.rb.buffer[idx][6] = self.rb.buffer[idx][7] - self.rb.buffer[idx][3]
+
+            # 下面是用gae的算法计算advantage
+            delta = self.rb.buffer[idx][7] - self.rb.buffer[idx][3]
+            if self.params["use_gae"]:
+                last_gae_lam = delta + self.params["gamma"] * self.params["gae_lambda"] * is_not_done * last_gae_lam
+            else:
+                last_gae_lam = delta
+            
+            ### 计算advantage
+            self.rb.buffer[idx][6] = last_gae_lam
     
     def train(self):
         """
@@ -241,17 +286,17 @@ class VanillaPPO(BaseAlgorithm):
             states = torch.stack([e[0] for e in experiences]).squeeze(1)
             old_actions = torch.stack([e[1] for e in experiences]).squeeze()
             old_action_log_probs = torch.tensor([e[5] for e in experiences], device=self.params["device"]).squeeze()
-            returns = torch.tensor([e[2] for e in experiences], device=self.params["device"], dtype=torch.float).squeeze()
             advantages = torch.tensor([e[6] for e in experiences], device=self.params["device"], dtype=torch.float).squeeze()
+            returns = torch.tensor([e[7] for e in experiences], device=self.params["device"], dtype=torch.float).squeeze()
 
             del experiences
 
             # 拿到当前网络下，以前的动作的新的log_prob
-            new_values, new_action_log_probs, new_entropy = self.policy.evaluate_actions(states, old_actions)
+            new_values, new_action_log_probs, new_entropy = self.policy.evaluate_action(states, old_actions)
             new_values = new_values.squeeze()
 
             # TODO: 这个是否需要正则化？正则化advantage
-            # advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
             ratio = torch.exp(
                 new_action_log_probs - old_action_log_probs
@@ -293,7 +338,39 @@ class VanillaPPO(BaseAlgorithm):
             # 3. 训练
             self.train()
             print(f"当前总胜率:{self.win_tims/(i+1)}")
-        print(f"总胜率:{self.win_tims/self.params['train_total_episodes']}")
+            if i % self.params["save_every"] == 0:
+                self.save(f"{self.params['SAVE_PATH']}epoch{i}_{self.last_n_avg_reward}.pth")
+        print(f"总胜率:{self.win_tims/self.params['train_total_episodes']}, 近n场胜率: {np.mean(self.last_n_win)}")
+    
+    def log(self, episode_num):
+        """
+        记录第几个episode的日志
+        episode_num: 第几个episode
+        """
+        if self.logger != None:
+            self.logger.record_num("episode reward", self.episode_reward, episode_num)
+            self.logger.record_num("last n avg reward", self.last_n_avg_reward, episode_num)
+            self.logger.record_num("last n win ratio", np.mean(self.last_n_win), episode_num)
+
+    def predict(self, x, deterministic=False):
+        pass
+
+    def save(self, path):
+        """
+        保存模型
+        path: 完成的文件路径，包括文件的后缀名字
+        """
+        tmp = {
+            "policy": self.policy.state_dict(),
+        }
+        torch.save(tmp, path)
+    
+    def load(self, path):
+        """
+        加载模型
+        """
+        tmp = torch.load(path)
+        self.policy.load_state_dict(tmp["policy"])
 
 class PPO_RLFC(BaseAlgorithm):
     """
@@ -831,3 +908,19 @@ class DQN_RLFC(BaseAlgorithm):
         在DQN中不需重置，设定了30w的上限
         """
         pass
+    def save(self, path):
+        """
+        保存模型
+        path: 完成的文件路径，包括文件的后缀名字
+        """
+        tmp = {
+            "policy": self.policy.state_dict(),
+        }
+        torch.save(tmp, path)
+    
+    def load(self, path):
+        """
+        加载模型
+        """
+        tmp = torch.load(path)
+        self.policy.load_state_dict(tmp["policy"])

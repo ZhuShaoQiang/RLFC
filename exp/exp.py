@@ -24,7 +24,7 @@ class ExpLoader(data.Dataset):
 
     def __len__(self):
         """
-        返回数据量长度，应该-1，因为我们要用下标索引，一次返回两个数据
+        返回数据量长度
         """
         return len(self.exps)
     
@@ -33,5 +33,9 @@ class ExpLoader(data.Dataset):
         这个地方是取数据主要的地方，取数据的逻辑从这里开始
         这里每次返回一整条轨迹的数据
         """
-        exp = torch.tensor(self.exps[idx], dtype=torch.float).to(self.device)
-        return exp
+        if isinstance(self.exps, list):
+            return torch.tensor(self.exps[idx], dtype=torch.float).to(self.device)
+        elif isinstance(self.exps, data.Dataset):  # 目前为止只有两种，dataset或者是list
+            return self.exps[idx]
+        else:
+            raise f"未识别的类型{type(self.exps)}, 期望：list、data.Dataset"
