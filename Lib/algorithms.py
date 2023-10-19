@@ -223,6 +223,9 @@ class VanillaPPO(BaseAlgorithm):
                 self.episode_reward = 0
                 if win:
                     self.win_tims += 1
+                    self.last_n_win.append(1)
+                else:
+                    self.last_n_win.append(0)
                 
                 self._last_obs, _ = self.env.reset()
             else:
@@ -337,10 +340,10 @@ class VanillaPPO(BaseAlgorithm):
             self.compute_advantage_and_return()
             # 3. 训练
             self.train()
-            print(f"当前总胜率:{self.win_tims/(i+1)}")
+            print(f"当前总胜率:{self.win_tims/(i+1)}, 近n场胜率: {np.mean(self.last_n_win)}")
             if i % self.params["save_every"] == 0:
                 self.save(f"{self.params['SAVE_PATH']}epoch{i}_{self.last_n_avg_reward}.pth")
-        print(f"总胜率:{self.win_tims/self.params['train_total_episodes']}, 近n场胜率: {np.mean(self.last_n_win)}")
+        print(f"总胜率:{self.win_tims/self.params['train_total_episodes']}")
     
     def log(self, episode_num):
         """
