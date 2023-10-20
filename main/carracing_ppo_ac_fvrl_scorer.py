@@ -130,6 +130,7 @@ def main():
                 optim.step()
                 train_loss += loss
                 print(f"{i}/{params['train_scorer_epoch']}: single step train loss: {train_loss}")
+    torch.save(scorer.state_dict(), params["SCORER_PATH"])
 
 
 if __name__ == "__main__":
