@@ -1,0 +1,34 @@
+"""
+"""
+import sys
+import os
+sys.path.append(os.getcwd())
+
+import gymnasium
+from stable_baselines3 import PPO
+from stable_baselines3.ppo import CnnPolicy, MlpPolicy
+from stable_baselines3.common.vec_env import DummyVecEnv
+
+import argparse
+
+from utils.envwrappers import RecordRewWrapper
+from config.config_halfcheetah_ppo_rlfc import params
+
+def main():
+    """
+    使用sb3写的PPO算法
+    """
+    env = gymnasium.make("HalfCheetah-v3", render_mode="rgb_array")
+    env = RecordRewWrapper(env, rew_log_dir=f"./ckp/log/rew/{params['env_name']}/ppo", avg_n=10)
+    env = DummyVecEnv([lambda: env])
+    model = PPO(
+        MlpPolicy, env, verbose=1, tensorboard_log=f"./ckp/log/{params['env_name']}_ppo/", gae_lambda=params["gae_lambda"],
+    )
+    print(model.policy)
+    model.learn(total_timesteps=1_000_000)
+    model.save(f"./ckp/pth/{params['env_name']}_ppo_100w.pth")
+    env.close()
+
+    
+if __name__ == "__main__":
+    main()
