@@ -1,0 +1,55 @@
+nohup: ignoring input
+Using cuda device
+SACPolicy(
+  (actor): Actor(
+    (features_extractor): FlattenExtractor(
+      (flatten): Flatten(start_dim=1, end_dim=-1)
+    )
+    (latent_pi): Sequential(
+      (0): Linear(in_features=17, out_features=256, bias=True)
+      (1): ReLU()
+      (2): Linear(in_features=256, out_features=256, bias=True)
+      (3): ReLU()
+    )
+    (mu): Linear(in_features=256, out_features=6, bias=True)
+    (log_std): Linear(in_features=256, out_features=6, bias=True)
+  )
+  (critic): ContinuousCritic(
+    (features_extractor): FlattenExtractor(
+      (flatten): Flatten(start_dim=1, end_dim=-1)
+    )
+    (qf0): Sequential(
+      (0): Linear(in_features=23, out_features=256, bias=True)
+      (1): ReLU()
+      (2): Linear(in_features=256, out_features=256, bias=True)
+      (3): ReLU()
+      (4): Linear(in_features=256, out_features=1, bias=True)
+    )
+  )
+  (critic_target): ContinuousCritic(
+    (features_extractor): FlattenExtractor(
+      (flatten): Flatten(start_dim=1, end_dim=-1)
+    )
+    (qf0): Sequential(
+      (0): Linear(in_features=23, out_features=256, bias=True)
+      (1): ReLU()
+      (2): Linear(in_features=256, out_features=256, bias=True)
+      (3): ReLU()
+      (4): Linear(in_features=256, out_features=1, bias=True)
+    )
+  )
+)
+---------------------------------
+| time/              |          |
+|    episodes        | 4        |
+|    fps             | 83       |
+|    time_elapsed    | 47       |
+|    total_timesteps | 4000     |
+| train/             |          |
+|    actor_loss      | -40.8    |
+|    critic_loss     | 1.05     |
+|    ent_coef        | 0.317    |
+|    ent_coef_loss   | -9.88    |
+|    learning_rate   | 0.0003   |
+|    n_updates       | 3899     |
+---------------------------------

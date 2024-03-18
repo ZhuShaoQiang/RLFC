@@ -1,0 +1,13 @@
+nohup: ignoring input
+/home/zhushaoq/.conda/envs/SB_FVRL/lib/python3.7/site-packages/glfw/__init__.py:916: GLFWError: (65544) b'X11: The DISPLAY environment variable is missing'
+  warnings.warn(message, GLFWError)
+/home/zhushaoq/.conda/envs/SB_FVRL/lib/python3.7/site-packages/torch/utils/tensorboard/__init__.py:5: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  tensorboard.__version__
+/home/zhushaoq/.conda/envs/SB_FVRL/lib/python3.7/site-packages/torch/utils/tensorboard/__init__.py:6: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  ) < LooseVersion("1.15"):
+Traceback (most recent call last):
+  File "main/sb3_DQN_FVRL_CW.py", line 51, in <module>
+    main()
+  File "main/sb3_DQN_FVRL_CW.py", line 40, in main
+    MlpPolicy, env, verbose=1, tensorboard_log=f"./ckp/log/{params['env_name']}_dqn/",
+TypeError: __init__() missing 4 required positional arguments: 'scorer', 'scorer_func', 'zf', and 'params'

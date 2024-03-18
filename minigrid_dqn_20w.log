@@ -1,0 +1,15 @@
+nohup: ignoring input
+/home/zhushaoq/.conda/envs/SB_FVRL/lib/python3.7/site-packages/glfw/__init__.py:916: GLFWError: (65544) b'X11: The DISPLAY environment variable is missing'
+  warnings.warn(message, GLFWError)
+/home/zhushaoq/.conda/envs/SB_FVRL/lib/python3.7/site-packages/torch/utils/tensorboard/__init__.py:5: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  tensorboard.__version__
+/home/zhushaoq/.conda/envs/SB_FVRL/lib/python3.7/site-packages/torch/utils/tensorboard/__init__.py:6: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  ) < LooseVersion("1.15"):
+Traceback (most recent call last):
+  File "main/sb3_DQN_MINIGRID.py", line 90, in <module>
+    main()
+  File "main/sb3_DQN_MINIGRID.py", line 59, in main
+    env = RecordWinStepWrapper(env, steps_log_dir=f"./ckp/log/steps/{params['env_name']}/dqn_fvrl_decal_2.0_10w", avg_n=10)
+  File "/home/zhushaoq/SB_FVRL/utils/envwrappers.py", line 43, in __init__
+    super(RecordRewWrapper, self).__init__(env, *args, **kwargs)
+TypeError: super(type, obj): obj must be an instance or subtype of type
