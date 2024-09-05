@@ -1,3 +1,7 @@
+# 注意 attention
+这个是RLFC v1版本，内部代码不再更新。请等待RLFC v2代码，这个代码正在路上。。。。。。
+This is RLFC v1 which will not be updated, please wait for RLFC v2.....
+
 # FVRL
 ```
 这个项目是为了从专家经验中（或者仅仅是成功经验中）学习一个打分器，这个经验可以是视频（图像输入环境），也可以是一个线路（网格世界），有了专家经验之后，可以更好的让agent学习，更快的学习。
